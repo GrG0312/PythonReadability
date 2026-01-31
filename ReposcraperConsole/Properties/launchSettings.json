@@ -1,0 +1,10 @@
+{
+  "profiles": {
+    "ReposcraperConsole": {
+      "commandName": "Project"
+    },
+    "Container (Dockerfile)": {
+      "commandName": "Docker"
+    }
+  }
+}
