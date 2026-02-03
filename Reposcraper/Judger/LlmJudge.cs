@@ -117,7 +117,7 @@ namespace Reposcraper.Judger
                     {
                         continue;
                     }
-                    scores.Add(new ReadabilityScore(item.Name, Clamp0To100(item.Score)));
+                    scores.Add(new ReadabilityScore(name, Clamp0To100(item.Score)));
                 }
             }
 

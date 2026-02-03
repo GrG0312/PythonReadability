@@ -1,4 +1,5 @@
 ﻿using Reposcraper.Extractors.Values;
+using Reposcraper.Savers.Values;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 
@@ -7,7 +8,7 @@ namespace Reposcraper.Savers
     public static class AggregatedJsonSaver
     {
         public static async Task SaveAllResultsAsync(
-            List<(IExtractedData data, ReadabilityScore score)> results,
+            Dictionary<IExtractedData, List<ReadabilityScore>> scoreResults,
             string outputPath)
         {
             try
@@ -19,25 +20,18 @@ namespace Reposcraper.Savers
                     Directory.CreateDirectory(directory);
                 }
 
-                var aggregatedData = new
-                {
-                    timestamp = DateTime.UtcNow.ToString("o"),
-                    totalItems = results.Count,
-                    results = results.Select(r => new
-                    {
-                        code = ConvertToJsonObject(r.data),
-                        readabilityScore = r.score.ScoreValue,
-                        metric = r.score.MetricName
-                    }).ToList()
-                };
+                SaveFileContent aggregatedData = new SaveFileContent
+                (
+                    timeStamp: DateTime.UtcNow.ToString("o"),
+                    totalItems: scoreResults.Count,
+                    results: scoreResults.Select(kvp => new SaveResultContent
+                    (
+                        code: ConvertToJsonObject(kvp.Key),
+                        readabilityScores: kvp.Value
+                    )).ToList()
+                );
 
-                JsonSerializerOptions options = new JsonSerializerOptions
-                {
-                    WriteIndented = true,
-                    DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
-                };
-
-                string jsonString = JsonSerializer.Serialize(aggregatedData, options);
+                string jsonString = JsonSerializer.Serialize(aggregatedData, SaverJsonContext.Default.SaveFileContent);
                 await File.WriteAllTextAsync(outputPath, jsonString);
             }
             catch (Exception ex)
