@@ -4,5 +4,4 @@
   </Folder>
   <Project Path="Reposcraper/Reposcraper.csproj" />
   <Project Path="ReposcraperConsole/ReposcraperConsole.csproj" Id="d6cc1e66-1a07-42c0-8b97-adac91f75de6" />
-  <Project Path="ScraperbotTest/ReposcraperTest.csproj" Id="874a728d-2e27-4e06-bc55-c415efc8b604" />
 </Solution>
