@@ -1,0 +1,33 @@
+﻿# HOW DO I SEE WHATS HAPPENING INSIDE THE DOCKER CONTAINER?
+# On server, find running container
+docker ps
+
+# Watch logs in real-time
+docker logs -f <container-id>
+
+# Or run interactively (for debugging)
+docker run -it --gpus all \
+  -v /path/to/models:/models \
+  --entrypoint /bin/bash \
+  reposcraper:latest
+
+# Now you're inside the container!
+root@container:/app# llama-server --help
+root@container:/app# ls /models
+root@container:/app# nvidia-smi
+
+
+# On your LOCAL machine, generate a key (if you don't have one)
+ssh-keygen -t ed25519
+
+# Copy your public key to the server
+ssh-copy-id nipg38
+
+# Now test - should connect without password
+ssh nipg38
+
+Q2.5 7b q4
+Q2.5 32b q8
+Q3 30b q4 (q8)
+
+htop -p <id>

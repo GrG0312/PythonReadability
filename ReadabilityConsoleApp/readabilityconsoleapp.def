@@ -1,0 +1,116 @@
+Bootstrap: docker
+From: nvidia/cuda:12.4.0-devel-ubuntu22.04
+
+%labels
+    Author Márton Gergő
+    Version 1.0
+    Description CodeReadabilityApp
+
+%post
+    # =============================== #
+    #    Install build dependencies   #
+    # =============================== #
+    apt-get update && apt-get install -y \
+        git \
+        build-essential \
+        cmake \
+        curl \
+        wget \
+        ca-certificates \
+        && rm -rf /var/lib/apt/lists/*
+
+
+    # ============================== #
+    #    Build llama.cpp with CUDA   #
+    # ============================== #
+    echo "Building llama.cpp with CUDA support for A100..."
+    cd /tmp
+    rm -rf llama.cpp
+    
+    # Clone the latest version
+    git clone --depth 1 --branch master https://github.com/ggerganov/llama.cpp.git
+    cd llama.cpp
+    
+    # Configure with CUDA - optimized for A100 GPUs (Compute Capability 8.0)
+    echo "Configuring CMake for A100..."
+    cmake -B build \
+        -DGGML_CUDA=ON \
+        -DCMAKE_BUILD_TYPE=Release \
+        -DCMAKE_CUDA_ARCHITECTURES="80" \
+        -DBUILD_SHARED_LIBS=OFF \
+        -DLLAMA_BUILD_TESTS=OFF \
+        -DLLAMA_BUILD_EXAMPLES=OFF
+    
+    # Build with error handling
+    echo "Building (this may take 10-15 minutes)..."
+    if ! cmake --build build --config Release -j$(nproc); then
+        echo "Parallel build failed, trying single-threaded..."
+        cmake --build build --config Release -j1 || exit 1
+    fi
+    
+    # Verify binary exists
+    if [ ! -f build/bin/llama-server ]; then
+        echo "ERROR: llama-server binary not found!"
+        find build -name "llama-server" -o -name "llama"
+        exit 1
+    fi
+    
+    cp build/bin/llama-server /usr/local/bin/
+    chmod +x /usr/local/bin/llama-server
+    
+    echo "llama-server installation successful!"
+    cd / && rm -rf /tmp/llama.cpp
+
+
+    # ============================ #
+    #    Install .NET 10 Runtime   #
+    # ============================ #
+    echo "Installing .NET 10 Runtime..."
+    wget https://dot.net/v1/dotnet-install.sh -O /tmp/dotnet-install.sh
+    chmod +x /tmp/dotnet-install.sh
+    /tmp/dotnet-install.sh --channel 10.0 --runtime dotnet --install-dir /usr/share/dotnet
+    ln -s /usr/share/dotnet/dotnet /usr/bin/dotnet
+    rm /tmp/dotnet-install.sh
+
+
+    # ======================= #
+    #    Create Directories   #
+    # ======================= #
+    mkdir -p /app
+
+%files
+    publish/ /app/
+
+%environment
+    export PATH=/usr/share/dotnet:/usr/local/bin:$PATH
+    export DOTNET_ROOT=/usr/share/dotnet
+    export NVIDIA_VISIBLE_DEVICES=all
+    export NVIDIA_DRIVER_CAPABILITIES=compute,utility
+
+%runscript
+    exec dotnet /app/ReadabilityConsoleApp.dll "$@"
+%help
+    Console Readability App
+
+    Usage:
+        apptainer run --nv --bind /path/to/models:/models --bind /path/to/output:/output readabilityconsoleapp.sif [options]
+
+    Required Options:
+        --gguf-path <path>          Path to GGUF model (use /models/filename.gguf)
+        --repo-url <url>            Repository URL to analyze
+        --language <lang>           Programming language (Python, CSharp, C++, C)
+        --extraction-type <type>    Type of extraction (methods, classes, files)
+        --output-path <path>        Output path (use /output/filename.json)
+
+    Optional:
+        --port <number>             Port for llama-server (default: 8080)
+        --gpu-layers <number>       GPU layers to offload (default: 99)
+        --github-token <token>      GitHub Personal Access Token
+
+    Example:
+        apptainer run --nv --bind /home/user/models:/models --bind /home/user/output:/output readabilityconsoleapp.sif \
+            --gguf-path /models/llama-3-8b.gguf \
+            --repo-url https://github.com/python/cpython \
+            --language Python \
+            --extraction-type methods \
+            --output-path /output/results.json
