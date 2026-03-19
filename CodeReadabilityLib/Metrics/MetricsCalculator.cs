@@ -1,8 +1,10 @@
-﻿namespace CodeReadabilityLib.Metrics
+﻿using CodeReadabilityLib.Languages;
+
+namespace CodeReadabilityLib.Metrics
 {
     public class MetricsCalculator : IMetricsCalculator
     {
-        public Task<IReadOnlyList<ReadabilityScore>> CalculateAsync(string code, SupportedLanguage language,
+        public Task<IReadOnlyList<ReadabilityScore>> CalculateAsync(string code, ProgLang language,
             IEnumerable<MetricDefinition> metrics, CancellationToken ctoken = default)
         {
             List<ReadabilityScore> scores = new List<ReadabilityScore>();
@@ -46,7 +48,7 @@
                 return 0;
             }
 
-            return lines.Average(l => l.TrimEnd().Length);
+            return lines.Average(line => line.TrimEnd().Length);
         }
 
         private static double CalculateCommentDensity(string code)

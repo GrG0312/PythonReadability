@@ -1,6 +1,7 @@
 ﻿using CodeReadabilityLib.Extractors;
 using CodeReadabilityLib.Extractors.Values;
 using CodeReadabilityLib.Judger;
+using CodeReadabilityLib.Languages;
 using CodeReadabilityLib.Metrics;
 using CodeReadabilityLib.Savers;
 using CodeReadabilityLib.Scrapers;
@@ -62,7 +63,7 @@ namespace CodeReadabilityLib
             _logger?.WriteLine($"Extracted {allExtractedData.Count} code elements.");
 
             // Determine language and applicable metrics
-            SupportedLanguage language = DetermineLanguage(fileExtension);
+            ProgLang language = DetermineLanguage(fileExtension);
             MetricDefinition[] llmMetrics = MetricRegistry.GetLlmBasedForLanguage(language).ToArray();
             MetricDefinition[] algorithmicMetrics = MetricRegistry.GetAlgorithmicForLanguage(language).ToArray();
 
@@ -124,12 +125,12 @@ namespace CodeReadabilityLib
             };
         }
 
-        private SupportedLanguage DetermineLanguage(string fileExtension)
+        private ProgLang DetermineLanguage(string fileExtension)
         {
             return fileExtension.ToLowerInvariant() switch
             {
-                ".py" => SupportedLanguage.Python,
-                ".cs" => SupportedLanguage.CSharp,
+                ".py" => ProgLang.Python,
+                ".cs" => ProgLang.CSharp,
                 _ => throw new ArgumentException($"Unsupported language: {fileExtension}")
             };
         }
