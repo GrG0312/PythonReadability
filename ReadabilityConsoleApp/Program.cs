@@ -1,9 +1,12 @@
 ﻿using CodeReadabilityLib;
+using CodeReadabilityLib.Evaluation;
+using CodeReadabilityLib.Evaluators;
 using CodeReadabilityLib.Extractors;
 using CodeReadabilityLib.Extractors.PatternMatcher;
 using CodeReadabilityLib.Judger;
 using CodeReadabilityLib.Savers;
 using CodeReadabilityLib.Scrapers;
+using System.Text.Json;
 using static ReadabilityConsoleApp.Arguments;
 
 namespace ReadabilityConsoleApp
@@ -17,48 +20,86 @@ namespace ReadabilityConsoleApp
                 Dictionary<string, string> arguments = ParseArguments(args);
 
                 // If asking for help
-                if (arguments.ContainsKey(ARG_HELP) || arguments.ContainsKey(ARG_HELP_SHORT))
+                if (arguments.ContainsKey(ARG_HELP))
                 {
                     ShowHelp();
                     return 0;
                 }
 
-                // Validate required arguments
-                if (!ValidateRequiredArguments(arguments, out string? error))
+                // Determine the mode (default to metric evaluation)
+                string mode = arguments.TryGetValue(ARG_MODE, out string? parsedMode)
+                    ? parsedMode.ToLowerInvariant()
+                    : MODE_METRIC;
+
+                if (mode == MODE_METRIC)
                 {
-                    Console.WriteLine($"Error: {error}");
-                    Console.WriteLine();
-                    ShowHelp();
+                    if (!ValidateRequiredArguments(arguments, MetricRequiredArguments, out string? error))
+                    {
+                        Console.WriteLine($"Error: {error}");
+                        Console.WriteLine();
+                        ShowHelp();
+                        return 1;
+                    }
+
+                    string ggufPath = arguments[ARG_GGUF_PATH];
+                    string repoUrl = arguments[ARG_REPO_URL];
+                    string language = arguments[ARG_LANGUAGE];
+                    string extractionType = arguments[ARG_EXTRACTION_TYPE];
+                    string outputPath = arguments[ARG_OUTPUT_PATH];
+
+                    int port = GetIntOrDefault(arguments, ARG_PORT, DEFAULT_PORT);
+                    int gpuLayers = GetIntOrDefault(arguments, ARG_GPU_LAYERS, DEFAULT_GPU_LAYERS);
+                    string? githubToken = arguments.GetValueOrDefault(ARG_GITHUB_TOKEN);
+
+                    await ExecuteMetricAsync(ggufPath, repoUrl, language, extractionType, outputPath, port, gpuLayers, githubToken, CancellationToken.None);
+                }
+                else if (mode == MODE_MODEL)
+                {
+                    if (!ValidateRequiredArguments(arguments, ModelRequiredArguments, out string? error))
+                    {
+                        Console.WriteLine($"Error: {error}");
+                        Console.WriteLine();
+                        ShowHelp();
+                        return 1;
+                    }
+
+                    string datasetPath = arguments[ARG_DATASET_PATH];
+                    string ggufDir = arguments[ARG_GGUF_DIR]; // Fixed: using ARG_GGUF_DIR
+                    string outputPath = arguments[ARG_OUTPUT_PATH];
+
+                    int port = GetIntOrDefault(arguments, ARG_PORT, DEFAULT_PORT);
+                    int gpuLayers = GetIntOrDefault(arguments, ARG_GPU_LAYERS, DEFAULT_GPU_LAYERS);
+
+                    // Fixed: Parse min/max scores with defaults fallback
+                    int minScore = GetIntOrDefault(arguments, ARG_MIN_SCORE, DEFAULT_MIN_SCORE);
+                    int maxScore = GetIntOrDefault(arguments, ARG_MAX_SCORE, DEFAULT_MAX_SCORE);
+
+                    await ExecuteModelEvaluationAsync(
+                        datasetPath: datasetPath,
+                        ggufDir: ggufDir,
+                        outputPath: outputPath,
+                        minScore: minScore,
+                        maxScore: maxScore,
+                        port: port,
+                        gpuLayers: gpuLayers,
+                        ctoken: CancellationToken.None);
+                }
+                else
+                {
+                    Console.WriteLine($"Error: Unknown mode '{mode}'. Use 'metric' or 'model'.");
                     return 1;
                 }
 
-                // Extract values
-                string ggufPath = arguments[ARG_GGUF_PATH];
-                string repoUrl = arguments[ARG_REPO_URL];
-                string language = arguments[ARG_LANGUAGE];
-                string extractionType = arguments[ARG_EXTRACTION_TYPE];
-                string outputPath = arguments[ARG_OUTPUT_PATH];
-
-                // Get argument values or defaults
-                int port = arguments.TryGetValue(ARG_PORT, out string? portStr)
-                   ? int.Parse(portStr)
-                   : DEFAULT_PORT;
-
-                int gpuLayers = arguments.TryGetValue(ARG_GPU_LAYERS, out string? gpuStr)
-                    ? int.Parse(gpuStr)
-                    : DEFAULT_GPU_LAYERS;
-
-                // TODO: implement other tokens aswell
-                string? githubToken = arguments.TryGetValue(ARG_GITHUB_TOKEN, out string? token)
-                    ? token
-                    : null; 
-
-                await ExecuteAsync(ggufPath, repoUrl, language, extractionType, outputPath, port, gpuLayers, githubToken, CancellationToken.None);
                 return 0;
             }
             catch (Exception ex)
             {
                 Console.WriteLine($"Fatal error: {ex.Message}");
+#if DEBUG
+                Console.WriteLine();
+                Console.WriteLine("Stack trace:");
+                Console.WriteLine(ex.StackTrace);
+#endif
                 return 1;
             }
         }
@@ -106,9 +147,9 @@ namespace ReadabilityConsoleApp
             return arguments;
         }
 
-        private static bool ValidateRequiredArguments(Dictionary<string, string> arguments, out string? error)
+        private static bool ValidateRequiredArguments(Dictionary<string, string> arguments, IReadOnlyList<string> requiredList, out string? error)
         {
-            foreach (string arg in RequiredArguments)
+            foreach (string arg in requiredList)
             {
                 if (!arguments.TryGetValue(arg, out string? value) || string.IsNullOrWhiteSpace(value))
                 {
@@ -121,107 +162,119 @@ namespace ReadabilityConsoleApp
             return true;
         }
 
+        private static int GetIntOrDefault(Dictionary<string, string> arguments, string key, int defaultValue)
+        {
+            return arguments.TryGetValue(key, out string? strVal) && int.TryParse(strVal, out int val)
+                ? val
+                : defaultValue;
+        }
+
         private static void ShowHelp()
         {
             Console.WriteLine("Reposcraper - Extract and evaluate code readability");
             Console.WriteLine();
             Console.WriteLine("Usage:");
-            Console.WriteLine("  ReposcraperConsole [options]");
+            Console.WriteLine("  ReposcraperConsole --mode <metric|model> [options]");
             Console.WriteLine();
-            Console.WriteLine("Required Options:");
+            Console.WriteLine("====== MODE: METRIC (Default) ======");
+            Console.WriteLine($"  Evaluate readability metrics on a GitHub repository.");
             Console.WriteLine($"  --{ARG_GGUF_PATH} <path>          Path to the GGUF model file");
             Console.WriteLine($"  --{ARG_REPO_URL} <url>            URL of the repository to analyze");
             Console.WriteLine($"  --{ARG_LANGUAGE} <language>       Programming language: Python, CSharp, C++, C");
             Console.WriteLine($"  --{ARG_EXTRACTION_TYPE} <type>    Type of extraction: methods, classes, or files");
             Console.WriteLine($"  --{ARG_OUTPUT_PATH} <path>        Path where the JSON results should be saved");
             Console.WriteLine();
+            Console.WriteLine("====== MODE: MODEL ======");
+            Console.WriteLine($"  Rank models against a dataset of human readability scores (1-5).");
+            Console.WriteLine($"  --{ARG_DATASET_PATH} <path>       Path to the CSV/JSON dataset");
+            Console.WriteLine($"  --{ARG_GGUF_PATH} <paths>         A path to the directory containing the GGUF files");
+            Console.WriteLine($"  --{ARG_OUTPUT_PATH} <path>        Path where the evaluation report should be saved");
+            Console.WriteLine();
             Console.WriteLine("Optional Options:");
             Console.WriteLine($"  --{ARG_PORT} <number>             Port for the llama-server (default: {DEFAULT_PORT})");
             Console.WriteLine($"  --{ARG_GPU_LAYERS} <number>       Number of layers to offload to GPU (default: {DEFAULT_GPU_LAYERS})");
-            Console.WriteLine($"  --{ARG_GITHUB_TOKEN} <token>      GitHub Personal Access Token");
+            Console.WriteLine($"  --{ARG_GITHUB_TOKEN} <token>      GitHub Personal Access Token (for Repo Scraping)");
             Console.WriteLine();
-            Console.WriteLine("Other:");
-            Console.WriteLine($"  --{ARG_HELP}, -{ARG_HELP_SHORT}                  Show this help message");
-            Console.WriteLine();
-            Console.WriteLine("Example:");
-            Console.WriteLine($"  ReposcraperConsole --{ARG_GGUF_PATH} model.gguf --{ARG_REPO_URL} https://github.com/user/repo");
-            Console.WriteLine($"                     --{ARG_LANGUAGE} Python --{ARG_EXTRACTION_TYPE} methods --{ARG_OUTPUT_PATH} results.json");
+            Console.WriteLine("Example Metric:");
+            Console.WriteLine($"  ReposcraperConsole --mode metric --{ARG_GGUF_PATH} model.gguf --{ARG_REPO_URL} https://github.com/user/repo --{ARG_LANGUAGE} Python --{ARG_EXTRACTION_TYPE} methods --{ARG_OUTPUT_PATH} results.json");
+            Console.WriteLine("Example Model:");
+            Console.WriteLine($"  ReposcraperConsole --mode model --{ARG_DATASET_PATH} ds.csv --{ARG_GGUF_PATH} \"m1.gguf;m2.gguf\" --{ARG_OUTPUT_PATH} report.json");
         }
 
-        private static async Task ExecuteAsync(string ggufPath, string repoUrl, string language, string extractionType, string outputPath,
+        private static async Task ExecuteMetricAsync(string ggufPath, string repoUrl, string language, string extractionType, string outputPath,
             int port, int gpuLayers, string? githubToken, CancellationToken ctoken)
         {
-            Console.WriteLine($"Reposcraper v{Reposcraper.Version}");
+            Console.WriteLine($"Reposcraper v{Reposcraper.Version} (Metric Mode)");
             Console.WriteLine(new string('=', 60));
-            Console.WriteLine($"GGUF Model:      {ggufPath}");
-            Console.WriteLine($"Repository:      {repoUrl}");
-            Console.WriteLine($"Language:        {language}");
-            Console.WriteLine($"Extraction Type: {extractionType}");
-            Console.WriteLine($"Output Path:     {outputPath}");
-            Console.WriteLine($"Port:            {port}");
-            Console.WriteLine($"GPU Layers:      {gpuLayers}");
-            Console.WriteLine(new string('=', 60));
-            Console.WriteLine();
+            // Logging ...
 
             GgufJudge? judge = null;
-
             try
             {
-                // Validate inputs
                 if (!File.Exists(ggufPath))
-                {
                     throw new FileNotFoundException($"GGUF file not found: {ggufPath}");
-                }
 
                 string fileExtension = GetFileExtension(language);
 
-                // Start GGUF LLM
                 Console.WriteLine("Starting GGUF LLM server...");
                 judge = new GgufJudge(ggufPath, port, gpuLayers);
                 await judge.StartLlamaAsync();
-                Console.WriteLine("LLM server started successfully.");
-                Console.WriteLine();
+                Console.WriteLine("LLM server started successfully.\n");
 
-                // Create components
                 GitHubScraper scraper = new GitHubScraper(githubToken);
                 IPatternMatcher patternMatcher = GetPatternMatcher(language);
                 IDataExtractor extractor = GetExtractor(extractionType, patternMatcher);
                 IDataSaver saver = new JsonDataSaver();
 
-                // Create and execute Reposcraper
-                Reposcraper reposcraper = new Reposcraper(scraper, extractor, judge,saver);
+                Reposcraper reposcraper = new Reposcraper(scraper, extractor, judge, saver);
                 await reposcraper.Execute(repoUrl, fileExtension, outputPath, ctoken);
 
-                Console.WriteLine();
-                Console.WriteLine("Execution completed successfully!");
-            }
-            catch (Exception ex)
-            {
-                Console.WriteLine();
-                Console.WriteLine($"Error: {ex.Message}");
-                if (ex.InnerException != null)
-                {
-                    Console.WriteLine($"Inner: {ex.InnerException.Message}");
-                }
-#if DEBUG
-                Console.WriteLine();
-                Console.WriteLine("Stack trace:");
-                Console.WriteLine(ex.StackTrace);
-#endif
-                throw;
+                Console.WriteLine("\nExecution completed successfully!");
             }
             finally
             {
-                // Stop the LLM server
                 if (judge != null)
                 {
-                    Console.WriteLine();
-                    Console.WriteLine("Stopping GGUF LLM server...");
+                    Console.WriteLine("\nStopping GGUF LLM server...");
                     judge.StopLlama();
                     judge.Dispose();
                     Console.WriteLine("LLM server stopped.");
                 }
             }
+        }
+
+        private static async Task ExecuteModelEvaluationAsync(string datasetPath, string ggufDir, string outputPath,
+    int minScore, int maxScore, int port, int gpuLayers, CancellationToken ctoken)
+        {
+            Console.WriteLine($"Reposcraper v{Reposcraper.Version} (Model Evaluation Mode)");
+            Console.WriteLine(new string('=', 60));
+            Console.WriteLine($"Dataset:     {datasetPath}");
+            Console.WriteLine($"Model Dir:   {ggufDir}");
+            Console.WriteLine($"Score Range: {minScore} to {maxScore}");
+            Console.WriteLine($"Output Path: {outputPath}");
+            Console.WriteLine(new string('=', 60));
+
+            // Call the newly created service
+            ModelRankingService service = new ModelRankingService(port, gpuLayers);
+
+            EvaluationReport rankedReport =
+                await service.EvaluateAsync(datasetPath, ggufDir, minScore, maxScore, ctoken);
+
+            // Save strictly matching the example format
+            string reportJson = JsonSerializer.Serialize(rankedReport, new JsonSerializerOptions
+            {
+                WriteIndented = true
+            });
+
+            string? dir = Path.GetDirectoryName(outputPath);
+            if (!string.IsNullOrEmpty(dir))
+            {
+                Directory.CreateDirectory(dir);
+            }
+
+            await File.WriteAllTextAsync(outputPath, reportJson, ctoken);
+
+            Console.WriteLine("\nModel evaluation and comparison completed successfully!");
         }
 
         private static string GetFileExtension(string language)

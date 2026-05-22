@@ -1,10 +1,8 @@
 ﻿#!/bin/bash
 
-# This script deploys the ReposcraperConsole application to a remote server using Apptainer.
-
 # Configuration variables
 SERVER="nipg38"
-DEPLOY_PATH="/home/bszalontai/gergo_munka/reposcraper"
+DEPLOY_PATH="/home/bszalontai/gergo_munka/readabilityconsoleapp"
 
 echo "========================================"
 echo "Step 1: Building .NET application locally..."
@@ -27,8 +25,6 @@ echo "========================================"
 echo "Step 2: Creating deployment package..."
 echo "========================================"
 
-# Create tarball - only include what's needed on server
-# Excludes: deploy scripts, git, build artifacts, VS files
 tar -czf readabilityconsoleapp.tar.gz \
     --exclude='.git' \
     --exclude='**/bin' \
@@ -89,11 +85,11 @@ echo "To run on server:"
 echo "  ssh $SERVER"
 echo "  cd $DEPLOY_PATH"
 echo ""
-echo "Direct run:"
-echo "  ./runApptainer.sh --gguf-path /models/<model>.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/<file>.json"
+echo "Mode: metric direct run:"
+echo "  ./runApptainer.sh --mode metric --gguf-path /models/model.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/out.json"
 echo ""
-echo "Background run (recommended for long jobs):"
-echo "  ./runTmux.sh --gguf-path /models/<model>.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/<file>.json"
+echo "Mode: model background run (recommended):"
+echo "  ./runTmux.sh --mode model --dataset-path /datasets/my_dataset.parquet --gguf-dir /models --output-path /output/report.json"
 echo ""
 echo "Check running jobs:"
 echo "  ./checkTmux.sh"

@@ -3,7 +3,7 @@ From: nvidia/cuda:12.4.0-devel-ubuntu22.04
 
 %labels
     Author Márton Gergő
-    Version 1.0
+    Version 1.2
     Description CodeReadabilityApp
 
 %post
@@ -17,6 +17,8 @@ From: nvidia/cuda:12.4.0-devel-ubuntu22.04
         curl \
         wget \
         ca-certificates \
+        libgomp1 \
+        libc6 \
         && rm -rf /var/lib/apt/lists/*
 
 
@@ -76,7 +78,7 @@ From: nvidia/cuda:12.4.0-devel-ubuntu22.04
     # ======================= #
     #    Create Directories   #
     # ======================= #
-    mkdir -p /app
+    mkdir -p /app /datasets
 
 %files
     publish/ /app/
@@ -89,28 +91,28 @@ From: nvidia/cuda:12.4.0-devel-ubuntu22.04
 
 %runscript
     exec dotnet /app/ReadabilityConsoleApp.dll "$@"
+
 %help
     Console Readability App
 
     Usage:
-        apptainer run --nv --bind /path/to/models:/models --bind /path/to/output:/output readabilityconsoleapp.sif [options]
+        apptainer run --nv --bind /path/to/models:/models --bind /path/to/output:/output --bind /path/to/datasets:/datasets readabilityconsoleapp.sif --mode <mode> [options]
 
-    Required Options:
+    Mode: metric (Code Extraction & Evaluation)
         --gguf-path <path>          Path to GGUF model (use /models/filename.gguf)
         --repo-url <url>            Repository URL to analyze
         --language <lang>           Programming language (Python, CSharp, C++, C)
         --extraction-type <type>    Type of extraction (methods, classes, files)
         --output-path <path>        Output path (use /output/filename.json)
+        --github-token <token>      (Optional) GitHub Personal Access Token
 
-    Optional:
+    Mode: model (Dataset Ranking)
+        --dataset-path <path>       Path to the dataset (use /datasets/dataset.parquet)
+        --gguf-dir <path>           Path to directory containing GGUF models (use /models)
+        --output-path <path>        Output path (use /output/report.json)
+        --min-score <number>        (Optional) Min score (default: 1)
+        --max-score <number>        (Optional) Max score (default: 5)
+
+    Global Optional:
         --port <number>             Port for llama-server (default: 8080)
         --gpu-layers <number>       GPU layers to offload (default: 99)
-        --github-token <token>      GitHub Personal Access Token
-
-    Example:
-        apptainer run --nv --bind /home/user/models:/models --bind /home/user/output:/output readabilityconsoleapp.sif \
-            --gguf-path /models/llama-3-8b.gguf \
-            --repo-url https://github.com/python/cpython \
-            --language Python \
-            --extraction-type methods \
-            --output-path /output/results.json

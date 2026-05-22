@@ -15,4 +15,8 @@
     <ProjectReference Include="..\CodeReadabilityLib\CodeReadabilityLib.csproj" />
   </ItemGroup>
 
+  <ItemGroup>
+    <Folder Include="datasets\" />
+  </ItemGroup>
+
 </Project>

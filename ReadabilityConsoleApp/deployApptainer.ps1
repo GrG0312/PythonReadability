@@ -2,7 +2,7 @@
 
 # Configuration variables
 $SERVER = "nipg38"
-$DEPLOY_PATH = "/home/bszalontai/gergo_munka/reposcraper"
+$DEPLOY_PATH = "/home/bszalontai/gergo_munka/readabilityconsoleapp"
 
 Write-Host "========================================"
 Write-Host "Step 1: Building .NET application locally..."
@@ -26,7 +26,6 @@ Write-Host "Step 2: Creating deployment package..."
 Write-Host "========================================"
 
 # Create tarball - only include what's needed on server
-# Excludes: deploy scripts, git, build artifacts, VS files
 tar -czf readabilityconsoleapp.tar.gz `
     --exclude='.git' `
     --exclude='**/bin' `
@@ -91,11 +90,11 @@ Write-Host "To run on server:"
 Write-Host "  ssh $SERVER"
 Write-Host "  cd $DEPLOY_PATH"
 Write-Host ""
-Write-Host "Direct run:"
-Write-Host "  ./runApptainer.sh --gguf-path /models/<model>.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/<file>.json"
+Write-Host "Mode: metric direct run:"
+Write-Host "  ./runApptainer.sh --mode metric --gguf-path /models/model.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/out.json"
 Write-Host ""
-Write-Host "Background run (recommended for long jobs):"
-Write-Host "  ./runTmux.sh --gguf-path /models/<model>.gguf --repo-url <url> --language <lang> --extraction-type <type> --output-path /output/<file>.json"
+Write-Host "Mode: model background run (recommended):"
+Write-Host "  ./runTmux.sh --mode model --dataset-path /datasets/my_dataset.parquet --gguf-dir /models --output-path /output/report.json"
 Write-Host ""
 Write-Host "Check running jobs:"
 Write-Host "  ./checkTmux.sh"
