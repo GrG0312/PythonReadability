@@ -2,7 +2,7 @@
 
 # Configuration variables
 $SERVER = "nipg38"
-$DEPLOY_PATH = "/home/bszalontai/gergo_munka/readabilityconsoleapp"
+$DEPLOY_PATH = "/home/bszalontai/gergo_munka/app/"
 
 Write-Host "========================================"
 Write-Host "Step 1: Building .NET application locally..."
@@ -48,6 +48,11 @@ Write-Host "========================================"
 
 scp readabilityconsoleapp.tar.gz "${SERVER}:${DEPLOY_PATH}/"
 
+if ($LASTEXITCODE -ne 0) {
+    Write-Host "❌ Transfer failed!" -ForegroundColor Red
+    exit 1
+}
+
 Write-Host "✅ Transfer complete!" -ForegroundColor Green
 
 Write-Host ""
@@ -63,8 +68,12 @@ mv ReadabilityConsoleApp/runApptainer.sh . && \
 mv ReadabilityConsoleApp/runTmux.sh . && \
 mv ReadabilityConsoleApp/checkTmux.sh . && \
 chmod +x runApptainer.sh runTmux.sh checkTmux.sh && \
+sed -i 's/\r//' runApptainer.sh && \
+sed -i 's/\r//' runTmux.sh && \
+sed -i 's/\r//' checkTmux.sh && \
 echo 'Building Apptainer image (this may take 10-15 minutes)...' && \
-apptainer build --fakeroot readabilityconsoleapp.sif ReadabilityConsoleApp/readabilityconsoleapp.def && \
+cp ReadabilityConsoleApp/readabilityconsoleapp.def . && \
+apptainer build --fakeroot readabilityconsoleapp.sif readabilityconsoleapp.def && \
 rm readabilityconsoleapp.tar.gz && \
 echo 'Apptainer image built successfully!'
 "@

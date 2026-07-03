@@ -1,7 +1,7 @@
 #!/bin/bash
 
 # Configuration
-LOG_DIR="/home/bszalontai/gergo_munka/readabilityconsoleapp/logs"
+LOG_DIR="/home/bszalontai/gergo_munka/logs"
 TIMESTAMP=$(date +"%Y%m%d_%H%M%S")
 SESSION_NAME="readabilityconsoleapp_$TIMESTAMP"
 LOG_FILE="$LOG_DIR/run_$TIMESTAMP.log"
@@ -10,7 +10,7 @@ LOG_FILE="$LOG_DIR/run_$TIMESTAMP.log"
 mkdir -p "$LOG_DIR"
 
 # Build the full command
-CMD="cd /home/bszalontai/gergo_munka/readabilityconsoleapp && ./runApptainer.sh $* 2>&1 | tee $LOG_FILE; echo 'Job finished at $(date)' >> $LOG_FILE"
+CMD="cd /home/bszalontai/gergo_munka/app && ./runApptainer.sh $@ 2>&1 | tee $LOG_FILE; echo \"Job finished at \$(date)\" >> $LOG_FILE"
 
 # Start detached tmux session
 tmux new-session -d -s "$SESSION_NAME" "$CMD"

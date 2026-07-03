@@ -8,11 +8,13 @@ namespace CodeReadabilityLib.Evaluators
     {
         private readonly int _port;
         private readonly int _gpuLayers;
+        private readonly string _llamaServerPath;
 
-        public ModelRankingService(int port, int gpuLayers)
+        public ModelRankingService(int port, int gpuLayers, string llamaServerPath)
         {
             _port = port;
             _gpuLayers = gpuLayers;
+            _llamaServerPath = llamaServerPath;
         }
 
         public async Task<EvaluationReport> EvaluateAsync(
@@ -23,7 +25,7 @@ namespace CodeReadabilityLib.Evaluators
             CancellationToken ctoken = default)
         {
             // 1. Load Dataset
-            IDatasetLoader loader = DatasetLoaderFactory.Create(datasetPath);
+            IDatasetLoader loader = DatasetLoaderFactory.Create(Path.GetExtension(datasetPath));
             List<CodeSnippetSample> samples = loader.Load(datasetPath);
 
             // 2. Discover Models
@@ -44,26 +46,31 @@ namespace CodeReadabilityLib.Evaluators
                     ModelName = Path.GetFileNameWithoutExtension(ggufPath)
                 };
 
-                using RangeGgufJudge judge = new RangeGgufJudge(ggufPath, _port, _gpuLayers, minScore, maxScore);
-                await judge.StartAsync();
-
-                foreach (CodeSnippetSample sample in samples)
+                using (RangeGgufJudge judge = new RangeGgufJudge(ggufPath, _llamaServerPath, _port, _gpuLayers, minScore, maxScore))
                 {
-                    if (ctoken.IsCancellationRequested) break;
+                    await judge.StartAsync();
 
-                    int predicted = await judge.ScoreSnippetAsync(sample.Code, ctoken);
-                    int error = Math.Abs(predicted - sample.Score);
-
-                    // Sort into the 4 buckets array: exactly 0, off by 1, off by 2, or >= 3
-                    int bucketIndex = Math.Min(3, error);
-                    modelResult.Answers[bucketIndex]++;
-
-                    modelResult.ConcreteAnswers.Add(new ConcreteAnswer
+                    foreach (CodeSnippetSample sample in samples)
                     {
-                        SnippetId = sample.Id,
-                        OriginalScore = sample.Score,
-                        ModelAnswer = predicted
-                    });
+                        if (ctoken.IsCancellationRequested) break;
+
+                        Console.WriteLine($"Scoring snippet {sample.Id}...");
+                        int predicted = await judge.ScoreSnippetAsync(sample.Code, ctoken);
+                        Console.WriteLine($"Score: {predicted}");
+
+                        int error = (int)Math.Abs(predicted - sample.Score);
+
+                        // Sort into the 4 buckets array: exactly 0, off by 1, off by 2, or >= 3
+                        int bucketIndex = Math.Min(3, error);
+                        modelResult.Answers[bucketIndex]++;
+
+                        modelResult.ConcreteAnswers.Add(new ConcreteAnswer
+                        {
+                            SnippetId = sample.Id,
+                            OriginalScore = sample.Score,
+                            ModelAnswer = predicted
+                        });
+                    }
                 }
 
                 report.ModelResults.Add(modelResult);

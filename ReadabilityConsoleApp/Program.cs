@@ -50,8 +50,9 @@ namespace ReadabilityConsoleApp
                     int port = GetIntOrDefault(arguments, ARG_PORT, DEFAULT_PORT);
                     int gpuLayers = GetIntOrDefault(arguments, ARG_GPU_LAYERS, DEFAULT_GPU_LAYERS);
                     string? githubToken = arguments.GetValueOrDefault(ARG_GITHUB_TOKEN);
+                    string llamaServerPath = arguments.GetValueOrDefault(ARG_LLAMA_SERVER_PATH, "llama-server");
 
-                    await ExecuteMetricAsync(ggufPath, repoUrl, language, extractionType, outputPath, port, gpuLayers, githubToken, CancellationToken.None);
+                    await ExecuteMetricAsync(ggufPath, repoUrl, language, extractionType, outputPath, port, gpuLayers, githubToken, llamaServerPath, CancellationToken.None);
                 }
                 else if (mode == MODE_MODEL)
                 {
@@ -73,6 +74,7 @@ namespace ReadabilityConsoleApp
                     // Fixed: Parse min/max scores with defaults fallback
                     int minScore = GetIntOrDefault(arguments, ARG_MIN_SCORE, DEFAULT_MIN_SCORE);
                     int maxScore = GetIntOrDefault(arguments, ARG_MAX_SCORE, DEFAULT_MAX_SCORE);
+                    string llamaServerPath = arguments.GetValueOrDefault(ARG_LLAMA_SERVER_PATH, "llama-server");
 
                     await ExecuteModelEvaluationAsync(
                         datasetPath: datasetPath,
@@ -82,6 +84,7 @@ namespace ReadabilityConsoleApp
                         maxScore: maxScore,
                         port: port,
                         gpuLayers: gpuLayers,
+                        llamaServerPath: llamaServerPath,
                         ctoken: CancellationToken.None);
                 }
                 else
@@ -202,11 +205,10 @@ namespace ReadabilityConsoleApp
         }
 
         private static async Task ExecuteMetricAsync(string ggufPath, string repoUrl, string language, string extractionType, string outputPath,
-            int port, int gpuLayers, string? githubToken, CancellationToken ctoken)
+            int port, int gpuLayers, string? githubToken, string llamaServerPath, CancellationToken ctoken)
         {
             Console.WriteLine($"Reposcraper v{Reposcraper.Version} (Metric Mode)");
             Console.WriteLine(new string('=', 60));
-            // Logging ...
 
             GgufJudge? judge = null;
             try
@@ -217,7 +219,7 @@ namespace ReadabilityConsoleApp
                 string fileExtension = GetFileExtension(language);
 
                 Console.WriteLine("Starting GGUF LLM server...");
-                judge = new GgufJudge(ggufPath, port, gpuLayers);
+                judge = new GgufJudge(ggufPath, llamaServerPath, port, gpuLayers);
                 await judge.StartLlamaAsync();
                 Console.WriteLine("LLM server started successfully.\n");
 
@@ -244,7 +246,7 @@ namespace ReadabilityConsoleApp
         }
 
         private static async Task ExecuteModelEvaluationAsync(string datasetPath, string ggufDir, string outputPath,
-    int minScore, int maxScore, int port, int gpuLayers, CancellationToken ctoken)
+    int minScore, int maxScore, int port, int gpuLayers, string llamaServerPath, CancellationToken ctoken)
         {
             Console.WriteLine($"Reposcraper v{Reposcraper.Version} (Model Evaluation Mode)");
             Console.WriteLine(new string('=', 60));
@@ -255,7 +257,7 @@ namespace ReadabilityConsoleApp
             Console.WriteLine(new string('=', 60));
 
             // Call the newly created service
-            ModelRankingService service = new ModelRankingService(port, gpuLayers);
+            ModelRankingService service = new ModelRankingService(port, gpuLayers, llamaServerPath);
 
             EvaluationReport rankedReport =
                 await service.EvaluateAsync(datasetPath, ggufDir, minScore, maxScore, ctoken);

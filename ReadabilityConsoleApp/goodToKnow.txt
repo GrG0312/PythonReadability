@@ -1,33 +1,23 @@
-﻿# HOW DO I SEE WHATS HAPPENING INSIDE THE DOCKER CONTAINER?
-# On server, find running container
-docker ps
+﻿# Usage::
 
-# Watch logs in real-time
-docker logs -f <container-id>
+1) Deploy
+./ReadabilityConsoleApp/deployApptainer.ps1
 
-# Or run interactively (for debugging)
-docker run -it --gpus all \
-  -v /path/to/models:/models \
-  --entrypoint /bin/bash \
-  reposcraper:latest
-
-# Now you're inside the container!
-root@container:/app# llama-server --help
-root@container:/app# ls /models
-root@container:/app# nvidia-smi
-
-
-# On your LOCAL machine, generate a key (if you don't have one)
-ssh-keygen -t ed25519
-
-# Copy your public key to the server
-ssh-copy-id nipg38
-
-# Now test - should connect without password
+2) Connect to the server
 ssh nipg38
+Asdfgh11_CodeRef
 
-Q2.5 7b q4
-Q2.5 32b q8
-Q3 30b q4 (q8)
+3) Start the app
+./runTmux.sh --gpu <gpu_id> --mode <model/metric> --dataset-path <path_to_parquet> --gguf-dir <path_to_gguf_files> --output-dir <path_to_output_dir>
 
-htop -p <id>
+Common helpers:
+nvidia-smi // to get gpu usage and id
+
+Common paths:
+-- dataset-path: ???
+-- gguf-dir: /ssd/bszalontai_local/models_gguf/
+-- output-dir: gergo_munka/output/
+
+
+Example
+./app/runTmux.sh --gpu 3 --mode model --dataset-path /datasets/javaDataset.parquet --gguf-dir /models --output-path /output/report.json

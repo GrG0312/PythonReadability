@@ -22,7 +22,7 @@ namespace CodeReadabilityLib.Datasets.Loaders
                 int numberOfRowsInGroup = checked((int)rowGroupReader.MetaData.NumRows);
 
                 string[] snippets = rowGroupReader.Column(0).LogicalReader<string>().ReadAll(numberOfRowsInGroup);
-                double[] scores = rowGroupReader.Column(1).LogicalReader<double>().ReadAll(numberOfRowsInGroup);
+                double?[] scores = rowGroupReader.Column(1).LogicalReader<double?>().ReadAll(numberOfRowsInGroup);
 
                 if (snippets.Length != scores.Length)
                 {
@@ -31,7 +31,7 @@ namespace CodeReadabilityLib.Datasets.Loaders
 
                 for (int i = 0; i < snippets.Length; i++)
                 {
-                    samples.Add(new CodeSnippetSample(Guid.NewGuid().ToString(), snippets[i], scores[i]));
+                    samples.Add(new CodeSnippetSample(Guid.NewGuid().ToString(), snippets[i], scores[i] ?? -1));
                 }
             }
 

@@ -81,7 +81,7 @@ From: nvidia/cuda:12.4.0-devel-ubuntu22.04
     mkdir -p /app /datasets
 
 %files
-    publish/ /app/
+    publish/ /app
 
 %environment
     export PATH=/usr/share/dotnet:/usr/local/bin:$PATH

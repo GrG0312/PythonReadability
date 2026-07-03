@@ -1,4 +1,5 @@
-﻿using System.Diagnostics;
+﻿using System.ComponentModel;
+using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 using System.Text.RegularExpressions;
@@ -11,20 +12,22 @@ namespace CodeReadabilityLib.Judger
     public class GgufJudge : LlmJudge, IDisposable
     {
         private readonly string _ggufFilePath;
+        private readonly string _llamaServerPath;
         private readonly int _port;
         private readonly HttpClient _httpClient;
         private Process? _llamaServerProcess;
         private bool _isRunning;
         private readonly int _gpuLayers;
 
-        public GgufJudge(string ggufFilePath, int port = 8080, int gpuLayers = 99)
+        public GgufJudge(string ggufFilePath, string llamaServerPath, int port = 8080, int gpuLayers = 99)
         {
             _ggufFilePath = ggufFilePath;
+            _llamaServerPath = llamaServerPath;
             _port = port;
             _gpuLayers = gpuLayers;
             _httpClient = new HttpClient
             {
-                BaseAddress = new Uri($"http://localhost:{_port}"),
+                BaseAddress = new Uri($"http://localhost:{_port}/"),
                 Timeout = TimeSpan.FromMinutes(5)
             };
         }
@@ -39,7 +42,7 @@ namespace CodeReadabilityLib.Judger
 
             ProcessStartInfo startInfo = new ProcessStartInfo
             {
-                FileName = "llama-server", // TODO: where is the llama server
+                FileName = _llamaServerPath,
                 Arguments = $"-m \"{_ggufFilePath}\" --port {_port} -ngl {_gpuLayers} --host 0.0.0.0",
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
@@ -47,7 +50,15 @@ namespace CodeReadabilityLib.Judger
                 CreateNoWindow = true,
             };
 
-            _llamaServerProcess = Process.Start(startInfo);
+            try
+            {
+                _llamaServerProcess = Process.Start(startInfo);
+            }
+            catch (Win32Exception ex)
+            {
+                throw new InvalidOperationException("Failed to start llama-server process. Ensure that llama-server is installed and in the system PATH.", ex);
+            }
+
 
             if (_llamaServerProcess is null)
             {
@@ -65,10 +76,18 @@ namespace CodeReadabilityLib.Judger
         {
             if (_llamaServerProcess is not null && !_llamaServerProcess.HasExited)
             {
-                _llamaServerProcess.Kill(entireProcessTree: true);
-                _llamaServerProcess.WaitForExit(5000);
-                _llamaServerProcess.Dispose();
-                _llamaServerProcess = null;
+                try
+                {
+                    _llamaServerProcess.Kill(entireProcessTree: true);
+                    _llamaServerProcess.WaitForExit(5000);
+                }
+                catch (InvalidOperationException) { /* Process already exited */ }
+                catch (Win32Exception) { /* Process might have already exited or access denied */ }
+                finally
+                {
+                    _llamaServerProcess.Dispose();
+                    _llamaServerProcess = null;
+                }
             }
             _isRunning = false;
         }
@@ -79,7 +98,7 @@ namespace CodeReadabilityLib.Judger
             {
                 try
                 {
-                    HttpResponseMessage response = await _httpClient.GetAsync("/health");
+                    HttpResponseMessage response = await _httpClient.GetAsync("health");
                     if (response.IsSuccessStatusCode)
                     {
                         return;
@@ -111,7 +130,7 @@ namespace CodeReadabilityLib.Judger
             };
 
             StringContent content = new StringContent(JsonSerializer.Serialize(requestBody), Encoding.UTF8, "application/json");
-            HttpResponseMessage response = await _httpClient.PostAsync("/v1/chat/completions", content, ctoken);
+            HttpResponseMessage response = await _httpClient.PostAsync("v1/chat/completions", content, ctoken);
             response.EnsureSuccessStatusCode();
 
             string responseJson = await response.Content.ReadAsStringAsync(ctoken);

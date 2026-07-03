@@ -8,6 +8,7 @@ namespace CodeReadabilityLib.Judger
     public class RangeGgufJudge : IDisposable
     {
         private readonly string _ggufPath;
+        private readonly string _llamaServerPath;
         private readonly int _port;
         private readonly int _gpuLayers;
         private readonly int _minScore;
@@ -17,14 +18,18 @@ namespace CodeReadabilityLib.Judger
         private Process? _server;
         private bool _running;
 
-        public RangeGgufJudge(string ggufPath, int port, int gpuLayers, int minScore, int maxScore)
+        public RangeGgufJudge(string ggufPath, string llamaServerPath, int port, int gpuLayers, int minScore, int maxScore)
         {
             _ggufPath = ggufPath;
+            _llamaServerPath = llamaServerPath;
             _port = port;
             _gpuLayers = gpuLayers;
             _minScore = minScore;
             _maxScore = maxScore;
-            _httpClient = new HttpClient { BaseAddress = new Uri($"http://localhost:{_port}"), Timeout = TimeSpan.FromMinutes(3) };
+            _httpClient = new HttpClient 
+            {
+                Timeout = TimeSpan.FromMinutes(10)
+            };
         }
 
         /// <summary>
@@ -38,15 +43,37 @@ namespace CodeReadabilityLib.Judger
 
             ProcessStartInfo psi = new ProcessStartInfo()
             {
-                FileName = "llama-server",
-                Arguments = $"-m \"{_ggufPath}\" --port {_port} -ngl {_gpuLayers} --host 0.0.0.0",
+                FileName = _llamaServerPath,
+                Arguments = $"-m \"{_ggufPath}\" --port {_port} -ngl {_gpuLayers} --host 0.0.0.0 --ctx-size 4096 --parallel 1",
                 UseShellExecute = false,
                 RedirectStandardOutput = true,
                 RedirectStandardError = true,
                 CreateNoWindow = true
             };
 
+            // Explicitly forward GPU environment to child process
+            string? cudaDevices = Environment.GetEnvironmentVariable("CUDA_VISIBLE_DEVICES");
+            if (!string.IsNullOrEmpty(cudaDevices))
+            {
+                psi.Environment["CUDA_VISIBLE_DEVICES"] = cudaDevices;
+                Console.WriteLine($"Forwarding CUDA_VISIBLE_DEVICES={cudaDevices} to llama-server");
+            }
+            else
+            {
+                Console.WriteLine("WARNING: CUDA_VISIBLE_DEVICES not set in environment!");
+            }
+
             _server = Process.Start(psi) ?? throw new InvalidOperationException("Could not start llama-server.");
+
+            // Write llama-server output to a dedicated log file
+            string llamaLog = $"/output/llama-server-{Path.GetFileNameWithoutExtension(_ggufPath)}.log";
+            StreamWriter logWriter = new StreamWriter(llamaLog, append: false) { AutoFlush = true };
+
+            _server.OutputDataReceived += (s, e) => { if (e.Data != null) logWriter.WriteLine(e.Data); };
+            _server.ErrorDataReceived += (s, e) => { if (e.Data != null) logWriter.WriteLine($"ERR: {e.Data}"); };
+            _server.BeginOutputReadLine();
+            _server.BeginErrorReadLine();
+
             await WaitUntilReadyAsync();
             _running = true;
         }
@@ -76,7 +103,10 @@ namespace CodeReadabilityLib.Judger
             };
 
             using StringContent content = new(JsonSerializer.Serialize(payload), Encoding.UTF8, "application/json");
-            using HttpResponseMessage response = await _httpClient.PostAsync("/v1/chat/completions", content, ctoken);
+            using CancellationTokenSource cts = CancellationTokenSource.CreateLinkedTokenSource(ctoken);
+            cts.CancelAfter(TimeSpan.FromMinutes(5));
+
+            using HttpResponseMessage response = await _httpClient.PostAsync($"http://localhost:{_port}/v1/chat/completions", content, cts.Token);
             response.EnsureSuccessStatusCode();
 
             string json = await response.Content.ReadAsStringAsync(ctoken);
@@ -103,13 +133,13 @@ namespace CodeReadabilityLib.Judger
         /// <param name="attempts">How many tries we allow to reach the server.</param>
         /// <param name="delayMs">The delay between each try.</param>
         /// <exception cref="TimeoutException">If the connection could not be established in time.</exception>
-        private async Task WaitUntilReadyAsync(int attempts = 30, int delayMs = 1000)
+        private async Task WaitUntilReadyAsync(int attempts = 360, int delayMs = 5000)
         {
             for (int i = 0; i < attempts; i++)
             {
                 try
                 {
-                    using HttpResponseMessage response = await _httpClient.GetAsync("/health");
+                    using HttpResponseMessage response = await _httpClient.GetAsync($"http://localhost:{_port}/health");
                     if (response.IsSuccessStatusCode) return;
                 }
                 catch { /* wait */ }
@@ -123,6 +153,7 @@ namespace CodeReadabilityLib.Judger
             if (_server is not null && !_server.HasExited)
             {
                 _server.Kill(entireProcessTree: true);
+                _server.WaitForExit(10000);
                 _server.Dispose();
             }
             _httpClient.Dispose();

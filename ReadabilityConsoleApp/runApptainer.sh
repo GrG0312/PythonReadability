@@ -2,12 +2,11 @@
 
 # Configuration
 GGUF_DIR="/ssd/bszalontai_local/models_gguf"                          
-OUTPUT_DIR="/home/bszalontai/gergo_munka/readabilityconsoleapp/output"          
-DATASET_DIR="/home/bszalontai/gergo_munka/readabilityconsoleapp/datasets"
-SIF_PATH="/home/bszalontai/gergo_munka/readabilityconsoleapp/readabilityconsoleapp.sif"   
-DEFAULT_GPU_IDS="3" 
+OUTPUT_DIR="/home/bszalontai/gergo_munka/output"          
+DATASET_DIR="/home/bszalontai/gergo_munka/input"
+SIF_PATH="/home/bszalontai/gergo_munka/app/readabilityconsoleapp.sif"
 
-GPU_IDS="$DEFAULT_GPU_IDS"
+GPU_IDS=""
 ARGS=()
 
 while [[ $# -gt 0 ]]; do
@@ -23,15 +22,24 @@ while [[ $# -gt 0 ]]; do
     esac
 done
 
+if [ -z "$GPU_IDS" ]; then
+    echo "❌ No GPU specified. Use --gpu <id>"
+    exit 1
+fi
+
 echo "Using GPU(s): $GPU_IDS"
+
+# Check SIF file exists
+if [ ! -f "$SIF_PATH" ]; then
+    echo "❌ SIF file not found: $SIF_PATH"
+    exit 1
+fi
 
 # Create output and dataset directories if they don't exist
 mkdir -p "$OUTPUT_DIR"
 mkdir -p "$DATASET_DIR"
 
 # Run the Apptainer container
-# --nv: Enable NVIDIA GPU support
-# --bind: Mount directories
 apptainer run \
     --nv \
     --env CUDA_VISIBLE_DEVICES="$GPU_IDS" \
@@ -39,4 +47,4 @@ apptainer run \
     --bind "$DATASET_DIR:/datasets:ro" \
     --bind "$OUTPUT_DIR:/output" \
     "$SIF_PATH" \
-    "${ARGS[@]}"
+    "${ARGS[@]}" || echo "❌ Apptainer run failed with exit code $?"

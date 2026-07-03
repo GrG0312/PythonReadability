@@ -4,12 +4,13 @@ namespace CodeReadabilityLib.Datasets
 {
     public static class DatasetLoaderFactory
     {
-        public static IDatasetLoader Create(string datasetType)
+        public static IDatasetLoader Create(string extension)
         {
-            return datasetType switch
+            return extension switch
             {
-                ".csv" => new CsvDatasetLoader(),
-                _ => throw new ArgumentException($"Unsupported dataset type: {datasetType}")
+                ".csv" or "csv" => new CsvDatasetLoader(),
+                ".parquet" or "parquet" => new ParquetDatasetLoader(),
+                _ => throw new ArgumentException($"Unsupported dataset type: {extension}")
             };
         }
     }

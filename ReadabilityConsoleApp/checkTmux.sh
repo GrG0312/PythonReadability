@@ -16,8 +16,8 @@ fi
 echo "========================================"
 echo "📁 Recent Log Files"
 echo "========================================"
-# Path updated from 'reposcraper' to 'readabilityconsoleapp'
-LOG_DIR="/home/bszalontai/gergo_munka/readabilityconsoleapp/logs"
+
+LOG_DIR="/home/bszalontai/gergo_munka/logs"
 
 if [ -d "$LOG_DIR" ]; then
     ls -lt "$LOG_DIR" | head -6

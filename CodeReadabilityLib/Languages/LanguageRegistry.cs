@@ -1,6 +1,4 @@
-﻿using CodeReadabilityLib.Languages.LanguageContexts;
-
-namespace CodeReadabilityLib.Languages
+﻿namespace CodeReadabilityLib.Languages
 {
     public static class LanguageRegistry
     {

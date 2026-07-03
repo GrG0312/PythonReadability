@@ -102,7 +102,7 @@ namespace CodeReadabilityLib.Metrics
 	                }
 
                     string cleanedCode = string.Join('\n', lines);
-                    int 
+                    // TODO??
                     return 50;
                 }
             },
